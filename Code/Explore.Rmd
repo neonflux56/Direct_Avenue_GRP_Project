@@ -1,0 +1,595 @@
+---
+title: "Explore"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(readr)
+devtools::install_github("thomasp85/patchwork")
+library(patchwork)
+install.packages("ggpubr")
+library(ggpubr)
+theme_set(theme_pubr())
+```
+
+
+
+
+```{r}
+
+#Load Data
+January <- read_excel("../Data/January.xlsx")
+February <- read_excel("../Data/February.xlsx")
+March <- read_excel("../Data/March.xlsx")
+April <- read_excel("../Data/April.xlsx")
+May <- read_excel("../Data/May.xlsx")
+June <- read_excel("../Data/June.xlsx")
+July <- read_excel("../Data/July.xlsx")
+August <- read_excel("../Data/August.xlsx")
+September1 <- read_excel("../Data/September1.xlsx")
+September2 <- read_excel("../Data/September2.xlsx")
+September3 <- read_excel("../Data/September3.xlsx")
+September <- rbind(September1,September2,September3)
+October <- read_excel("../Data/October.xlsx")
+November <- read_excel("../Data/November.xlsx")
+December1 <- read_excel("../Data/December1.xlsx")
+December2 <- read_excel("../Data/December2.xlsx")
+December <- rbind(December1,December2)
+Allyear <- read_csv("../Data/data.csv")
+
+
+
+
+
+LowerBoundTime <- c(0,3,6,9,12,15,18,21)
+Timeslots <- c(1,2,3,4,5,6,7,8)
+Timeslot_quadrant <- c("Post Midnight","Very Early Morning","Early Morning","Morning","Noon","Evening","Night","Late Night")
+time_slot_df <- data.frame(cbind(LowerBoundTime,Timeslots,Timeslot_quadrant))
+
+
+sum(Allyear$GRP == 0 & Allyear$`Impression(000)` == 0, na.rm = TRUE) / length(Allyear$X1)
+ 
+
+
+```
+
+
+```{r}
+
+#Preprocessing
+
+preprocess <- function(df) {
+  #rename
+  
+  #colnames(df)[-1] = "Imp"
+  
+  arg <- sys.call()
+  month <- as.character(arg[-1])
+  if (month == "January"){
+    df <- df %>% rename(Imp = `Impression (000)`)
+  }
+  else if(month == "November" | month == "December"){
+    df <- df %>% rename(Imp = Impression)
+  }
+  else{
+    df <- df %>% rename(Imp = `Impression(000)`)
+  }
+  
+  
+  #Get Type
+  df <- df %>% rowwise() %>% mutate(Type = ifelse(Imp == 0 & GRP == 0, "Unrated","Rated")) 
+  
+  # Get cost per impression CPI
+  df <- df %>% rowwise() %>% mutate(CPI = ifelse(Type == "Rated", `Spot Cost`/Imp , 0))
+  
+  
+  #Get TimeSlot
+  get_time_slot <- function(col_val) {
+  x = tail(which(as.numeric(unlist(strsplit(col_val,":")))[1] >= as.numeric(as.character(time_slot_df$LowerBoundTime))) , n=1 )
+  return (x)
+  }
+  df <- df %>% rowwise() %>% mutate(Time_slot =time_slot_df$Timeslot_quadrant[ get_time_slot(`Time Aired`)] )
+  #Get Day of Week
+  df$Day_of_week <- weekdays(df$`Date Aired`)
+  return (df)
+}
+
+January <- preprocess(January)
+February <- preprocess(February)
+March <- preprocess(March)
+April <- preprocess(April)
+May <- preprocess(May)
+June <- preprocess(June)
+July <- preprocess(July)
+August <- preprocess(August)
+September <- preprocess(September)
+October <- preprocess(October)
+November <- preprocess(November)
+December <- preprocess(December)
+#Allyear <- preprocess(Allyear)
+
+
+```
+
+
+#Graphical Analysis
+
+
+```{r}
+
+
+
+# NOTE ****** GRP and Impression are linear and the insights are same for both
+
+
+
+graph <- function(df){
+  
+
+######  
+#Count   
+
+p1 <- df %>% group_by(Type) %>% summarise(Count = n()) %>% ggplot(aes(x = Type, y =Count, fill = Type)) + geom_bar(stat="identity") + labs(x="Type", y ="Count") + theme_minimal()
+  
+  
+  
+##########
+  
+#Station ID
+  
+p2 <- df %>% filter(Type == "Rated") %>% group_by(`Station ID`) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_CPI), y=Avg_CPI)) + geom_bar(stat="identity") + labs(x="Station ID", y ="Average CPI") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+  
+  
+  
+p3 <- df %>% filter(Type == "Rated") %>% group_by(`Station ID`) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_GRP), y=Avg_GRP)) + geom_bar(stat="identity") + labs(x="Station ID", y ="Average GRP") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+p4 <- df %>% filter(Type == "Rated") %>% group_by(`Station ID`) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_IMP), y=Avg_IMP)) + geom_bar(stat="identity") + labs(x="Station ID", y ="Average IMP") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+
+p5 <- df %>% filter(Type == "Rated") %>% group_by(`Station ID`) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=`Station ID`)) + geom_line(aes(y=Avg_GRP),group =1, color = "blue") + geom_point(aes(y=Avg_GRP)) + 
+  geom_line(aes(y=Avg_CPI),group =1, color = "red") + geom_point(aes(y=Avg_CPI)) +
+  labs(x="Station ID") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+###############
+
+#Creative Access
+
+
+
+p6 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Access) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(Access,Avg_GRP), y=Avg_GRP, fill = Access)) + geom_bar(stat="identity") + labs(x="Creative Access", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p7 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Access) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(Access,Avg_IMP), y=Avg_IMP, fill = Access)) + geom_bar(stat="identity") + labs(x="Creative Access", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p8 <- df %>% filter(Type == "Rated") %>% group_by(Access) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% 
+  ggplot(aes(x=fct_reorder(Access,Avg_CPI), y=Avg_CPI, fill = Access)) + geom_bar(stat="identity") +
+  labs(x="Access" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+########
+# DMA
+
+p9 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(DMA) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(DMA,Avg_IMP), y=Avg_IMP, fill = DMA)) + geom_bar(stat="identity") + labs(x="Designated Market Area", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+p10 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(DMA) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(DMA,Avg_GRP), y=Avg_GRP, fill = DMA)) + geom_bar(stat="identity") + labs(x="Designated Market Area", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+#######
+# Market
+
+
+p11 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Market) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(Market,Avg_GRP), y=Avg_GRP, fill = Market)) + geom_bar(stat="identity") + labs(x="Market", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p12 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Market) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp)  ) %>% ggplot(aes(x=fct_reorder(Market,Avg_IMP), y=Avg_IMP, fill = Market)) + geom_bar(stat="identity") + labs(x="Market", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p13 <- df %>% filter(Type == "Rated") %>% group_by(Market) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(Market,Avg_CPI), y=Avg_CPI, fill = Market)) + geom_bar(stat="identity") +
+  labs(x="Market" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+###########
+
+# Day of Week
+
+p14 <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Day_of_week) %>% summarise(count = n(), Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(Day_of_week,Avg_IMP), y=Avg_IMP, fill = Day_of_week)) + geom_bar(stat="identity") + labs(x="Day_of_week", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+
+p15 <- df %>% filter(Type == "Rated") %>% group_by(Day_of_week) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(Day_of_week,Avg_CPI), y=Avg_CPI, fill = Day_of_week)) + geom_bar(stat="identity") +
+  labs(x="Day_of_week" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+###########
+# Time Slot
+
+p16 <- df %>% filter(Type == "Rated") %>% group_by(Time_slot) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(Time_slot,Avg_IMP), y=Avg_IMP)) + geom_bar(stat="identity") + labs(x="Time_slot" , y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p17 <- df %>% filter(Type == "Rated") %>% group_by(Time_slot) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI)  ) %>% ggplot(aes(x=fct_reorder(Time_slot,Avg_CPI), y=Avg_CPI)) + geom_bar(stat="identity") + labs(x="Time_slot" , y ="Average CPI") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+final_p <- ggarrange(p1, p2, p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,
+                    #labels = c("A", "B", "C"),
+                    ncol = 2, nrow = 2)
+
+arg <- sys.call()
+ggexport(final_p, filename = paste(as.character(arg[-1]),".pdf",sep = ""),nrow = 2, ncol = 1)
+
+return(final_p)
+
+}
+
+
+
+```
+
+
+
+
+```{r}
+annotate_figure(
+  graph(January)[[1]],
+  top = text_grob(paste("Visualizing January"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(January)[[2]],
+  top = text_grob(paste("Visualizing January"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(January)[[3]],
+  top = text_grob(paste("Visualizing January"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(January)[[4]],
+  top = text_grob(paste("Visualizing January"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(February)[[1]],
+  top = text_grob(paste("Visualizing February"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(February)[[2]],
+  top = text_grob(paste("Visualizing February"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(February)[[3]],
+  top = text_grob(paste("Visualizing February"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(February)[[4]],
+  top = text_grob(paste("Visualizing February"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(March)[[1]],
+  top = text_grob(paste("Visualizing March"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(March)[[2]],
+  top = text_grob(paste("Visualizing March"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(March)[[3]],
+  top = text_grob(paste("Visualizing March"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(March)[[4]],
+  top = text_grob(paste("Visualizing March"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(April)[[1]],
+  top = text_grob(paste("Visualizing April"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(April)[[2]],
+  top = text_grob(paste("Visualizing April"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(April)[[3]],
+  top = text_grob(paste("Visualizing April"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(April)[[4]],
+  top = text_grob(paste("Visualizing April"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(May)[[1]],
+  top = text_grob(paste("Visualizing May"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(May)[[2]],
+  top = text_grob(paste("Visualizing May"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(May)[[3]],
+  top = text_grob(paste("Visualizing May"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(May)[[4]],
+  top = text_grob(paste("Visualizing May"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(June)[[1]],
+  top = text_grob(paste("Visualizing June"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(June)[[2]],
+  top = text_grob(paste("Visualizing June"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(June)[[3]],
+  top = text_grob(paste("Visualizing June"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(June)[[4]],
+  top = text_grob(paste("Visualizing June"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(July)[[1]],
+  top = text_grob(paste("Visualizing July"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(July)[[2]],
+  top = text_grob(paste("Visualizing July"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(July)[[3]],
+  top = text_grob(paste("Visualizing July"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(July)[[4]],
+  top = text_grob(paste("Visualizing July"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+```{r}
+annotate_figure(
+  graph(August)[[1]],
+  top = text_grob(paste("Visualizing August"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(August)[[2]],
+  top = text_grob(paste("Visualizing August"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(August)[[3]],
+  top = text_grob(paste("Visualizing August"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(August)[[4]],
+  top = text_grob(paste("Visualizing August"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+```{r}
+annotate_figure(
+  graph(September)[[1]],
+  top = text_grob(paste("Visualizing September"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(September)[[2]],
+  top = text_grob(paste("Visualizing September"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(September)[[3]],
+  top = text_grob(paste("Visualizing September"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(September)[[4]],
+  top = text_grob(paste("Visualizing September"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+```{r}
+annotate_figure(
+  graph(October)[[1]],
+  top = text_grob(paste("Visualizing October"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(October)[[2]],
+  top = text_grob(paste("Visualizing October"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(October)[[3]],
+  top = text_grob(paste("Visualizing October"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(October)[[4]],
+  top = text_grob(paste("Visualizing October"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+```{r}
+annotate_figure(
+  graph(November)[[1]],
+  top = text_grob(paste("Visualizing November"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(November)[[2]],
+  top = text_grob(paste("Visualizing November"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(November)[[3]],
+  top = text_grob(paste("Visualizing November"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(November)[[4]],
+  top = text_grob(paste("Visualizing November"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+```{r}
+annotate_figure(
+  graph(December)[[1]],
+  top = text_grob(paste("Visualizing December"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(December)[[2]],
+  top = text_grob(paste("Visualizing December"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(December)[[3]],
+  top = text_grob(paste("Visualizing December"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  graph(December)[[4]],
+  top = text_grob(paste("Visualizing December"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
+
+
+
+
+
+```{r}
+
+December %>% filter(Type == "Rated") %>% group_by(Time_slot) %>% summarise(count = n(),Avg_GRP = mean(GRP) , Avg_IMP = mean(Imp), Avg_CPI = mean(CPI) )
+```
+
+
+
+
+
