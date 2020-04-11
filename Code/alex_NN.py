@@ -9,7 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Dropout
 from keras.callbacks import (EarlyStopping, ModelCheckpoint, ReduceLROnPlateau,
                              LearningRateScheduler, TensorBoard)
 from keras.optimizers import SGD, Adam
@@ -19,30 +19,27 @@ dat = pd.read_csv('../Data/dat_features.csv')
 dat = dat.loc[:, "Access":]
 print(dat.columns)
 
-unseen = dat[(dat.Impressions.eq(0.0)) & (dat.GRP.eq(0.0)) | (dat.active_flag.eq(1))]
+unseen = dat[dat.Impressions.eq(0.0)]
 training = dat[dat.Impressions > 0.0]
 
 labels = [
+        'Impressions',
         'Q119', 'Q219',
         'Q319', 'Q419',
         'BP', 'DC', 'DE', 'DP',
         'GD', 'GX', 'PL', 'PM',
         'PN', 'PT', 'SR', 'SV',
         'TN', 'VE',
-        "Length",
-        "Spot_Cost",
-        "Cable",
-        "DirecTV",
-        "Dish_Network",
-        "National_Network",
+        'Length',
+        'Spot_Cost',
+        'Cable',
+        'DirecTV',
+        'Dish_Network',
+        'National_Network',
         "Over-the-top_content",
         'Q1', 'Q2', 'Q3', 'Q4',
         'bin_1', 'bin_2',
         'bin_3', 'bin_4', 'bin_5',
-        'Daytime', 'Early_Fringe',
-        'Late_Fringe', 'Late_Night',
-        'Morning', 'Overnight',
-        'Primetime',
         'midnight', 'one_am', 'two_am', 'three_am', 'four_am', 'five_am',
         'six_am', 'seven_am', 'eight_am', 'nine_am', 'ten_am', 'eleven_am',
         'noon', 'one_pm', 'two_pm', 'three_pm', 'four_pm', 'five_pm', 'six_pm',
@@ -50,7 +47,7 @@ labels = [
     ]
 
 X = training.loc[:, labels]
-y = training.loc[:, "Impressions"]
+y = training.loc[:, 'absolute_audience_size']
 
 scaler_x = MinMaxScaler()
 scaler_y = MinMaxScaler()
@@ -76,7 +73,7 @@ def scheduler(epoch):
 
 
 callbacks = [# TensorBoard(log_dir=logspath),
-             EarlyStopping(monitor='val_mean_squared_error', patience=10, mode='min'),
+             EarlyStopping(monitor='val_mean_squared_error', patience=8, mode='min'),
              ModelCheckpoint(filepath, monitor='val_mean_squared_error', verbose=1, mode='min', period=1,
                              save_best_only=True),
              ReduceLROnPlateau(monitor='val_mean_squared_error', patience=5, verbose=1, factor=0.25,
@@ -92,7 +89,8 @@ model.add(Dense(512, activation='relu'))
 model.add(Dense(256, activation='relu'))
 model.add(Dense(256, activation='relu'))
 
-model.add(Dense(64, activation='relu'))
+model.add(Dense(128, activation='relu'))
+model.add(Dense(128, activation='relu'))
 
 model.add(Dense(1))
 
