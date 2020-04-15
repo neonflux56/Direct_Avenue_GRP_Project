@@ -23,7 +23,6 @@ unseen = dat[dat.Impressions.eq(0.0)]
 training = dat[dat.Impressions > 0.0]
 
 labels = [
-        'Impressions',
         'Q119', 'Q219',
         'Q319', 'Q419',
         'BP', 'DC', 'DE', 'DP',
@@ -79,20 +78,27 @@ callbacks = [# TensorBoard(log_dir=logspath),
              ReduceLROnPlateau(monitor='val_mean_squared_error', patience=5, verbose=1, factor=0.25,
                                min_lr=0.00000001, mode='min')]
 
-model = Sequential()
-model.add(Dense(1024, input_dim=dim, activation='relu'))
-model.add(Dense(1024, activation='relu'))
+def create_model():
+    model = Sequential()
+    model.add(Dense(256, input_dim=dim, activation='relu'))
+    model.add(Dense(256, activation='relu'))
 
-model.add(Dense(512, activation='relu'))
-model.add(Dense(512, activation='relu'))
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(128, activation='relu'))
 
-model.add(Dense(256, activation='relu'))
-model.add(Dense(256, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(64, activation='relu'))
 
-model.add(Dense(128, activation='relu'))
-model.add(Dense(128, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(32, activation='relu'))
 
-model.add(Dense(1))
+    model.add(Dense(16, activation='relu'))
+
+    model.add(Dense(1))
+    return model
+
+model = create_model()
+print(model.summary())
 
 ad = Adam(lr=0.001,
           amsgrad=True)
@@ -102,7 +108,13 @@ model.compile(loss='mean_squared_error',
 
 model.fit(X_train, y_train,
           epochs=100, validation_split=0.3, callbacks=callbacks)
-preds = scaler_y.inverse_transform(model.predict(X_test))
+# preds_train = model.predict(X_train)
+# preds_test = model.predict(X_test)
+preds_train = scaler_y.inverse_transform(model.predict(X_train))
+preds_test = scaler_y.inverse_transform(model.predict(X_test))
 
-print(np.mean(preds))
-print(np.sqrt(MSE(scaler_y.inverse_transform(y_test), preds)))
+print(np.mean(preds_test))
+# print('Training error', np.sqrt(MSE(scaler_y.inverse_transform(y_train), preds_train)))
+# print('Test error', np.sqrt(MSE(scaler_y.inverse_transform(y_test), preds)))
+print('Training error', np.sqrt(MSE(scaler_y.inverse_transform(y_train), preds_train)))
+print('Test error', np.sqrt(MSE(scaler_y.inverse_transform(y_test), preds_test)))
