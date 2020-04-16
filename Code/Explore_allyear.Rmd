@@ -1,0 +1,313 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+#update.packages()
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(readr)
+#devtools::install_github("thomasp85/patchwork")
+library(patchwork)
+#install.packages("ggpubr")
+library(ggpubr)
+theme_set(theme_pubr())
+```
+
+
+
+
+```{r}
+
+#Load Data
+
+Allyear <- read_csv("../Data/data.csv")
+
+Allyear <- Allyear %>% filter(`Impression(000)` > 0)
+
+
+
+LowerBoundTime <- c(0,3,6,9,12,15,18,21)
+Timeslots <- c(1,2,3,4,5,6,7,8)
+Timeslot_quadrant <- c("Post Midnight","Very Early Morning","Early Morning","Morning","Noon","Evening","Night","Late Night")
+time_slot_df <- data.frame(cbind(LowerBoundTime,Timeslots,Timeslot_quadrant))
+
+
+sum(Allyear$GRP == 0 & Allyear$`Impression(000)` == 0, na.rm = TRUE) / length(Allyear$X1)
+ 
+
+
+```
+
+
+```{r}
+
+library(radiant)
+#Preprocessing
+preprocess <- function(df) {
+  #rename
+  
+  #colnames(df)[-1] = "Imp"
+  
+  arg <- sys.call()
+  month <- as.character(arg[-1])
+  df <- df %>% rename(Imp = `Impression(000)`)
+  
+  
+  #Get Type
+  df <- df %>% rowwise() %>% mutate(Type = ifelse(Imp == 0 & GRP == 0, "Unrated","Rated")) 
+  
+  # Get cost per impression CPI
+  df <- df %>% rowwise() %>% mutate(CPI = ifelse(Type == "Rated", `Spot Cost`/Imp , 0))
+  
+  
+  #Get TimeSlot
+  get_time_slot <- function(col_val) {
+  x = tail(which(as.numeric(unlist(strsplit(as.character(col_val),":")))[1] >= as.numeric(as.character(time_slot_df$LowerBoundTime))) , n=1 )
+  return (x)
+  }
+  df <- df %>% rowwise() %>% mutate(Time_slot =time_slot_df$Timeslot_quadrant[ get_time_slot(`Time Aired`)] )
+  #Get Day of Week
+  df$Day_of_week <- weekdays(df$`Date Aired`)
+  return (df)
+}
+
+
+Allyear <- preprocess(Allyear)
+
+
+
+
+```
+
+
+#Graphical Analysis
+
+
+```{r}
+
+
+
+# NOTE ****** GRP and Impression are linear and the insights are same for both
+
+
+
+graph <- function(df){
+  
+###############
+#Creative Access
+
+Access <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Access) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p1 <- Access %>% ggplot(aes(x=fct_reorder(Access,count), y=count, fill = Access)) + geom_bar(stat="identity") + labs(x="Access", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p2 <- Access %>% ggplot(aes(x=fct_reorder(Access,Avg_GRP), y=Avg_GRP, fill = Access)) + geom_bar(stat="identity") + labs(x="Access", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p3 <- Access %>% ggplot(aes(x=fct_reorder(Access,Avg_IMP), y=Avg_IMP, fill = Access)) + geom_bar(stat="identity") + labs(x="Access", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p4 <- Access %>% 
+  ggplot(aes(x=fct_reorder(Access,Avg_CPI), y=Avg_CPI, fill = Access)) + geom_bar(stat="identity") +
+  labs(x="Access" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1)) 
+
+
+
+##########
+#Estimate 
+
+df$Estimate <- as.factor(df$Estimate)
+
+Estimate <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Estimate) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p5 <- Estimate %>% ggplot(aes(x=fct_reorder(Estimate,count), y=count, fill = Estimate)) + geom_bar(stat="identity") + labs(x="Estimate", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p6 <- Estimate %>% ggplot(aes(x=fct_reorder(Estimate,Avg_GRP), y=Avg_GRP, fill = Estimate)) + geom_bar(stat="identity") + labs(x="Estimate", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p7 <- Estimate %>% ggplot(aes(x=fct_reorder(Estimate,Avg_IMP), y=Avg_IMP, fill = Estimate)) + geom_bar(stat="identity") + labs(x="Estimate", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p8 <- Estimate %>% 
+  ggplot(aes(x=fct_reorder(Estimate,Avg_CPI), y=Avg_CPI, fill = Estimate)) + geom_bar(stat="identity") +
+  labs(x="Estimate" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1)) 
+
+
+
+##########
+#Length
+
+df$Length <- as.factor(df$Length)
+
+Length <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Length) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p9 <- Length %>% ggplot(aes(x=fct_reorder(Length,count), y=count, fill = Length)) + geom_bar(stat="identity") + labs(x="Length", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p10 <- Length %>% ggplot(aes(x=fct_reorder(Length,Avg_GRP), y=Avg_GRP, fill = Length)) + geom_bar(stat="identity") + labs(x="Length", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p11 <- Length %>% ggplot(aes(x=fct_reorder(Length,Avg_IMP), y=Avg_IMP, fill = Length)) + geom_bar(stat="identity") + labs(x="Length", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p12 <- Length %>% 
+  ggplot(aes(x=fct_reorder(Length,Avg_CPI), y=Avg_CPI, fill = Length)) + geom_bar(stat="identity") +
+  labs(x="Length" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+###############
+#Market
+Market <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Market) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p13 <- Market %>% ggplot(aes(x=fct_reorder(Market,count), y=count, fill = Market)) + geom_bar(stat="identity") + labs(x="Market", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p14 <- Market %>% ggplot(aes(x=fct_reorder(Market,Avg_GRP), y=Avg_GRP, fill = Market)) + geom_bar(stat="identity") + labs(x="Market", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p15 <- Market %>% ggplot(aes(x=fct_reorder(Market,Avg_IMP), y=Avg_IMP, fill = Market)) + geom_bar(stat="identity") + labs(x="Market", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p16 <- Market %>% 
+  ggplot(aes(x=fct_reorder(Market,Avg_CPI), y=Avg_CPI, fill = Market)) + geom_bar(stat="identity") +
+  labs(x="Market" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+
+###############
+#Station ID
+df$`Station ID` <- as.factor(df$`Station ID`)
+StationID <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(`Station ID`) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+
+
+
+p17 <- StationID %>% ggplot(aes(x=fct_reorder(`Station ID`,count), y=count)) + 
+  geom_bar(stat="identity") + labs(x="Station ID", y ="count") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+p18 <- StationID %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_GRP), y=Avg_GRP)) + 
+  geom_bar(stat="identity") + labs(x="Station ID", y ="Average GRP") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+p19 <- StationID %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_IMP), y=Avg_IMP)) + 
+  geom_bar(stat="identity") + labs(x="Station ID", y ="Average IMP") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+p20 <- StationID %>% ggplot(aes(x=fct_reorder(`Station ID`,Avg_CPI), y=Avg_CPI)) + 
+  geom_bar(stat="identity") + labs(x="Station ID", y ="Average CPI") + theme_minimal() + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+
+
+
+###############
+#Time Slots
+
+Time_slot <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Time_slot) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p21 <- Time_slot %>% ggplot(aes(x=fct_reorder(Time_slot,count), y=count, fill = Time_slot)) + geom_bar(stat="identity") + labs(x="Time_slot", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p22 <- Time_slot %>% ggplot(aes(x=fct_reorder(Time_slot,Avg_GRP), y=Avg_GRP, fill = Time_slot)) + geom_bar(stat="identity") + labs(x="Time_slot", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p23 <- Time_slot %>% ggplot(aes(x=fct_reorder(Time_slot,Avg_IMP), y=Avg_IMP, fill = Time_slot)) + geom_bar(stat="identity") + labs(x="Time_slot", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p24 <- Time_slot %>% 
+  ggplot(aes(x=fct_reorder(Time_slot,Avg_CPI), y=Avg_CPI, fill = Time_slot)) + geom_bar(stat="identity") +
+  labs(x="Time_slot" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+
+###############
+# DOW
+
+Day_of_week <- df %>% filter(GRP!= 0 & Imp != 0) %>% group_by(Day_of_week) %>% 
+  summarise(count = n(), Avg_GRP = mean(GRP, na.rm=TRUE) , Avg_IMP = mean(Imp, na.rm=TRUE), Avg_CPI = mean(CPI, na.rm=TRUE)  )
+
+p25 <- Day_of_week %>% ggplot(aes(x=fct_reorder(Day_of_week,count), y=count, fill = Day_of_week)) + geom_bar(stat="identity") + labs(x="Day_of_week", y ="count") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+p26 <- Day_of_week %>% ggplot(aes(x=fct_reorder(Day_of_week,Avg_GRP), y=Avg_GRP, fill = Day_of_week)) + geom_bar(stat="identity") + labs(x="Day_of_week", y ="Average GRP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p27 <- Day_of_week %>% ggplot(aes(x=fct_reorder(Day_of_week,Avg_IMP), y=Avg_IMP, fill = Day_of_week)) + geom_bar(stat="identity") + labs(x="Day_of_week", y ="Average IMP") + theme_minimal()+  theme(axis.text.x=element_text(angle = 45, hjust = 1))
+
+
+p28 <- Day_of_week %>% 
+  ggplot(aes(x=fct_reorder(Day_of_week,Avg_CPI), y=Avg_CPI, fill = Day_of_week)) + geom_bar(stat="identity") +
+  labs(x="Day_of_week" , y ="Average CPI") + theme_minimal() +  theme(axis.text.x=element_text(angle = 45, hjust = 1)) 
+
+
+
+
+
+
+
+final_p <- ggarrange(p1, p2, p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27,p28,
+                    #labels = c("A", "B", "C"),
+                    ncol = 2, nrow = 2)
+
+arg <- sys.call()
+ggexport(final_p, filename = paste(as.character(arg[-1]),".pdf",sep = ""),nrow = 2, ncol = 1)
+
+return(final_p)
+
+}
+
+
+
+```
+
+
+
+
+```{r}
+a = graph(Allyear)
+annotate_figure(
+  a[[1]],
+  top = text_grob(paste("Visualizing Access"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  a[[2]],
+  top = text_grob(paste("Visualizing Estimate"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  a[[3]],
+  top = text_grob(paste("Visualizing Length"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  a[[4]],
+  top = text_grob(paste("Visualizing Market"),
+                  color = "red", face = "bold", size = 14)
+  )
+annotate_figure(
+  a[[5]],
+  top = text_grob(paste("Visualizing Station ID"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+annotate_figure(
+  a[[6]],
+  top = text_grob(paste("Visualizing Time Slot"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+annotate_figure(
+  a[[7]],
+  top = text_grob(paste("Visualizing Day of Week"),
+                  color = "red", face = "bold", size = 14)
+  )
+
+
+```
+
